@@ -1,0 +1,44 @@
+name: Kind Kubernetes - Run Bash Script
+on: [push]
+
+jobs:
+  kind-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Install kind
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: ci-kind
+
+      - name: Show cluster info
+        run: |
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Build container image (local)
+        run: |
+          docker build -t myactions-script:local .
+
+      - name: Load image into kind
+        run: |
+          kind load docker-image myactions-script:local --name ci-kind
+
+      - name: Run script as Kubernetes Job
+        run: |
+          kubectl apply -f k8s/job.yaml
+          kubectl wait --for=condition=complete job/run-bash-script --timeout=180s
+          kubectl logs job/run-bash-script
+
+      - name: Cleanup job
+        if: always()
+        run: |
+          kubectl delete job/run-bash-script --ignore-not-found=true
